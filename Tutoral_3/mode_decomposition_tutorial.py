@@ -1,5 +1,9 @@
 import meep as mp
 import matplotlib.pyplot as plt
+"""
+exemple du tuto de mode decomposition
+https://meep.readthedocs.io/en/master/Python_Tutorials/Mode_Decomposition/
+"""
 
 resolution = 25   # pixels/μm
 
