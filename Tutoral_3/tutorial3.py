@@ -57,30 +57,37 @@ source = [mp.EigenModeSource(src,
                              center=source_center)]
 
 geometry = [
+    # left waveguide
     mp.Block(center=mp.Vector3(x=-Sx/4), material=Si,
-             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),  # left waveguide
+             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),
+    # top right waveguide
     mp.Block(center=mp.Vector3(x=Sx/4, y=arm_separation/2), material=Si,
-             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),  # top right waveguide
+             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),
+    # bottom right waveguide
     mp.Block(center=mp.Vector3(x=Sx/4, y=-arm_separation/2), material=Si,
-             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),  # bottom right waveguide
+             size=mp.Vector3(Sx/2+1, waveguide_width, 0)),
     mp.Block(center=design_region.center,
              size=design_region.size, material=design_variables)
 ]
 
-sim = mp.Simulation(cell_size=cell_size,
-                    boundary_layers=pml_layers,
-                    geometry=geometry,
-                    sources=source,
-                    # symmetries=[mp.Mirror(direction=mp.Y)],
-                    default_material=SiO2,
-                    resolution=resolution)
+
+def get_sim():
+    sim = mp.Simulation(cell_size=cell_size,
+                        boundary_layers=pml_layers,
+                        geometry=geometry,
+                        sources=source,
+                        symmetries=[mp.Mirror(direction=mp.Y)],
+                        default_material=SiO2,
+                        resolution=resolution)
+    return sim
 
 
 def mapping(x, eta, beta):
 
     ic(x.shape)
     ic(Nx, Ny)
-    x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2  # up-down symmetry
+    # up-down symmetry
+    x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2
 
     # filter
     filtered_field = mpa.conic_filter(x, filter_radius, design_region_width,
@@ -97,33 +104,49 @@ def mapping(x, eta, beta):
 design_region.update_design_parameters(
     mapping(np.random.rand(Nx, Ny), 0.5, 256))
 
+
+def get_sim_coeffs_from_flux_region(sim, fluxregion):
+    flux = sim.add_flux(fcen, 0, 1, FluxRegions=fluxregion)
+    breakpoint()
+    sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, mon_pt,
+                                                            1e-9))
+    res = sim.get_eigenmode_coefficients(flux, [1],
+                                         eig_parity=mp.ODD_Z+mp.EVEN_Y)
+    coeffs = res.alpha
+    return coeffs
+
+
+# Get incident flux coefficients
+sim = get_sim()
 mode = 1
 mon_pt = mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3)
 size = mp.Vector3(y=1.5)
 fluxregion = mp.FluxRegion(center=mon_pt, size=size)
-source_flux = sim.add_flux(fcen, 0, 1, FluxRegions=fluxregion)
+source_coeffs = get_sim_coeffs_from_flux_region(sim, fluxregion)
 
+# Get top output flux coefficients
+sim.reset_meep()
+sim = get_sim
 center = mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3)
 size = mp.Vector3(y=1.5)
 topfluxregion = mp.FluxRegion(center, size)
-top_mon = sim.add_mode_monitor(fcen, 0, 1, topfluxregion)
+# pas sur cest quoi la difference entre add_flux pi add_mode_monitor...
+# top_mon = sim.add_mode_monitor(fcen, 0, 1, topfluxregion)
+top_out_coeffs = get_sim_coeffs_from_flux_region(sim, topfluxregion)
 
-center = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length /
-                    3, -arm_separation/2, 0)
+# Get bot output flux coeffs
+sim.reset_meep()
+sim = get_sim
+center = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length / 3,
+                    -arm_separation/2, 0)
 size = mp.Vector3(y=arm_separation)
 botfluxregion = mp.FluxRegion(center, size)
 bot_mon = sim.add_mode_monitor(fcen, 0, 1, botfluxregion)
+bot_out_coeffs = get_sim_coeffs_from_flux_region(sim, botfluxregion)
 
-sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, mon_pt, 1e-9))
-sourcecoeff = sim.get_eigenmode_coefficients(source_flux,
-                                             [1], eig_parity=mp.ODD_Z+mp.EVEN_Y)
-topcoeff = sim.get_eigenmode_coefficients(top_mon,
-                                          [1], eig_parity=mp.ODD_Z+mp.EVEN_Y)
-botcoeff = sim.get_eigenmode_coefficients(bot_mon,
-                                          [1], eig_parity=mp.ODD_Z+mp.EVEN_Y)
-
-J = (topcoeff/sourcecoeff)**2 + (botcoeff/sourcecoeff)**2
+J = (top_out_coeffs/source_coeffs)**2 + (bot_out_coeffs/source_coeffs)**2
 print(J)
+
 
 # -----------opim stuff below
 #

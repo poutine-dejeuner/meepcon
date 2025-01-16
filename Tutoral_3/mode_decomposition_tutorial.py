@@ -1,5 +1,6 @@
 import meep as mp
 import matplotlib.pyplot as plt
+from icecream import ic
 """
 exemple du tuto de mode decomposition
 https://meep.readthedocs.io/en/master/Python_Tutorials/Mode_Decomposition/
@@ -12,7 +13,8 @@ w2 = 2.0          # width of waveguide 2
 Lw = 10.0         # length of waveguides 1 and 2
 
 # lengths of waveguide taper
-Lts = [2**m for m in range(4)]
+# Lts = [2**m for m in range(4)]
+Lts = [2**m for m in range(1)]
 
 dair = 3.0        # length of air region
 dpml_x = 6.0      # length of PML in x direction
@@ -98,12 +100,16 @@ for Lt in Lts:
     sim.run(until_after_sources=mp.stop_when_fields_decayed(
         50, mp.Ez, mon_pt, 1e-9))
 
-    res = sim.get_eigenmode_coefficients(
-        flux, [1], eig_parity=mp.ODD_Z+mp.EVEN_Y)
+    res = sim.get_eigenmode_coefficients(flux, [1],
+                                         eig_parity=mp.ODD_Z+mp.EVEN_Y)
     taper_coeffs = res.alpha
     taper_flux = mp.get_fluxes(flux)
 
     R_coeffs.append(abs(taper_coeffs[0, 0, 1])
                     ** 2/abs(incident_coeffs[0, 0, 0])**2)
     R_flux.append(-taper_flux[0]/incident_flux[0])
-    print("refl:, {}, {:.8f}, {:.8f}".format(Lt, R_coeffs[-1], R_flux[-1]))
+    out_str = "refl:, Lt{}, R_coeff{:.8f}, R_flux{:.8f}".format(Lt,
+                                                                R_coeffs[-1],
+                                                                R_flux[-1])
+    ic(out_str)
+    ic(R_coeffs)
