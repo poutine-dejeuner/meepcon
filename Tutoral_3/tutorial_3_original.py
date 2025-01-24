@@ -1,4 +1,4 @@
-import nlopt
+# import nlopt
 from autograd import tensor_jacobian_product
 import autograd.numpy as npa
 from matplotlib import pyplot as plt
@@ -80,7 +80,7 @@ sim = mp.Simulation(cell_size=cell_size,
                     # symmetries=[mp.Mirror(direction=mp.Y)],
                     default_material=SiO2,
                     resolution=resolution)
-sim.plot2D()
+# sim.plot2D()
 
 
 # ## Design parameter mapping

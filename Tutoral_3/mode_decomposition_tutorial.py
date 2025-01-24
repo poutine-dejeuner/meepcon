@@ -61,8 +61,9 @@ for Lt in Lts:
                         symmetries=symmetries)
 
     mon_pt = mp.Vector3(-0.5*sx+dpml_x+0.7*Lw)
-    flux = sim.add_flux(fcen, 0, 1, mp.FluxRegion(
-        center=mon_pt, size=mp.Vector3(y=sy-2*dpml_y)))
+    fluxregion = mp.FluxRegion(
+        center=mon_pt, size=mp.Vector3(y=sy-2*dpml_y))
+    flux = sim.add_flux(fcen, 0, 1, fluxregion)
 
     sim.run(until_after_sources=mp.stop_when_fields_decayed(
         50, mp.Ez, mon_pt, 1e-9))

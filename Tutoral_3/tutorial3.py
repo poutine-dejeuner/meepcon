@@ -3,6 +3,7 @@ import numpy as np
 import meep.adjoint as mpa
 import meep as mp
 from icecream import ic
+import matplotlib.pyplot as plt
 
 seed = 240
 np.random.seed(seed)
@@ -54,7 +55,8 @@ source = [mp.EigenModeSource(src,
                              direction=mp.NO_DIRECTION,
                              eig_kpoint=kpoint,
                              size=source_size,
-                             center=source_center)]
+                             center=source_center,
+                             eig_parity=mp.ODD_Z+mp.EVEN_Y)]
 
 geometry = [
     # left waveguide
@@ -71,21 +73,16 @@ geometry = [
 ]
 
 
-def get_sim():
-    sim = mp.Simulation(cell_size=cell_size,
-                        boundary_layers=pml_layers,
-                        geometry=geometry,
-                        sources=source,
-                        symmetries=[mp.Mirror(direction=mp.Y)],
-                        default_material=SiO2,
-                        resolution=resolution)
-    return sim
-
-
 def mapping(x, eta, beta):
+    """
+    input
+    x: un array numpy
+    eta: ??
+    beta: ??
 
-    ic(x.shape)
-    ic(Nx, Ny)
+    output
+    projecter_field: un objet a utiliser avec design_region.update_design_parameters
+    """
     # up-down symmetry
     x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2
 
@@ -101,165 +98,57 @@ def mapping(x, eta, beta):
     return projected_field.flatten()
 
 
-design_region.update_design_parameters(
-    mapping(np.random.rand(Nx, Ny), 0.5, 256))
-
-
 def get_sim_coeffs_from_flux_region(sim, fluxregion):
-    flux = sim.add_flux(fcen, 0, 1, FluxRegions=fluxregion)
-    breakpoint()
+    sim.reset_meep()
+    flux = sim.add_flux(fcen, 0, 1, fluxregion)
+    # breakpoint()
+    mon_pt = mp.Vector3(*source_center)
     sim.run(until_after_sources=mp.stop_when_fields_decayed(50, mp.Ez, mon_pt,
                                                             1e-9))
     res = sim.get_eigenmode_coefficients(flux, [1],
                                          eig_parity=mp.ODD_Z+mp.EVEN_Y)
     coeffs = res.alpha
-    return coeffs
+    flux_data = mp.get_fluxes(flux)
+    return coeffs, flux_data
 
+
+index_map = mapping(np.random.rand(Nx, Ny), 0.5, 256)
+sim = mp.Simulation(cell_size=cell_size,
+                    boundary_layers=pml_layers,
+                    geometry=geometry,
+                    sources=source,
+                    symmetries=[mp.Mirror(direction=mp.Y)],
+                    default_material=SiO2,
+                    resolution=resolution)
+design_region.update_design_parameters(index_map)
 
 # Get incident flux coefficients
-sim = get_sim()
-mode = 1
+# source_center = [-Sx/2 + pml_size + waveguide_length/3, 0, 0]
 mon_pt = mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3)
 size = mp.Vector3(y=1.5)
 fluxregion = mp.FluxRegion(center=mon_pt, size=size)
-source_coeffs = get_sim_coeffs_from_flux_region(sim, fluxregion)
+source_coeffs, source_flux_data = get_sim_coeffs_from_flux_region(sim, fluxregion)
 
 # Get top output flux coefficients
-sim.reset_meep()
-sim = get_sim
-center = mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3)
-size = mp.Vector3(y=1.5)
-topfluxregion = mp.FluxRegion(center, size)
-# pas sur cest quoi la difference entre add_flux pi add_mode_monitor...
-# top_mon = sim.add_mode_monitor(fcen, 0, 1, topfluxregion)
-top_out_coeffs = get_sim_coeffs_from_flux_region(sim, topfluxregion)
+topmoncenter = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3, arm_separation/2, 0)
+outmonsize = mp.Vector3(y=arm_separation)
+topfluxregion = mp.FluxRegion(topmoncenter, outmonsize)
+top_coeffs, top_flux_data = get_sim_coeffs_from_flux_region(sim, topfluxregion)
 
 # Get bot output flux coeffs
-sim.reset_meep()
-sim = get_sim
-center = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length / 3,
+botmoncenter = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length / 3,
                     -arm_separation/2, 0)
-size = mp.Vector3(y=arm_separation)
-botfluxregion = mp.FluxRegion(center, size)
+botfluxregion = mp.FluxRegion(botmoncenter, outmonsize)
 bot_mon = sim.add_mode_monitor(fcen, 0, 1, botfluxregion)
-bot_out_coeffs = get_sim_coeffs_from_flux_region(sim, botfluxregion)
+bot_coeffs, bot_flux_data = get_sim_coeffs_from_flux_region(sim, botfluxregion)
 
-J = (top_out_coeffs/source_coeffs)**2 + (bot_out_coeffs/source_coeffs)**2
-print(J)
+top_coeff = top_coeffs[0,0,1]
+source_coeff = source_coeffs[0,0,0]
+bot_coeff = bot_coeffs[0,0,1]
+Jt = abs(top_coeff/source_coeff)**2
+Jb = abs(bot_coeff/source_coeff)**2
+FOM = Jt + Jb
+# Ce FOM a un max de 1 plutot que 0.5 comme dans Lumerical. Il faudrait 
+# prendre un seul des bras de sortie a monitorer.
+ic(FOM)
 
-
-# -----------opim stuff below
-#
-#  TE0 = mpa.EigenmodeCoefficient(sim,
-#                                 mp.Volume(center=mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3),
-#                                           size=mp.Vector3(y=1.5)), mode)
-#  TE_top = mpa.EigenmodeCoefficient(sim,
-#                                    mp.Volume(center=mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3, arm_separation/2, 0),
-#                                              size=mp.Vector3(y=arm_separation)), mode)
-#  TE_bottom = mpa.EigenmodeCoefficient(sim,
-#                                       mp.Volume(center=mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3, -arm_separation/2, 0),
-#                                                 size=mp.Vector3(y=arm_separation)), mode)
-#  ob_list = [TE0, TE_top, TE_bottom]
-#
-#
-#  def J(source, top, bottom):
-#      power = npa.abs(top/source) ** 2 + npa.abs(bottom/source) ** 2
-#      return npa.mean(power)
-#
-#
-#  opt = mpa.OptimizationProblem(
-#      simulation=sim,
-#      objective_functions=J,
-#      objective_arguments=ob_list,
-#      design_regions=[design_region],
-#      frequencies=frequencies
-#  )
-#  opt.plot2D(True)
-#
-#  x0 = 0.5*np.ones((Nx, Ny))
-#  f0, g0 = opt([mapping(x0, 0.5, 2)])
-#
-#  plt.figure()
-#  print(g0.shape)
-#  plt.imshow(np.rot90(g0[:, 0].reshape(Nx, Ny)))
-#  plt.colorbar()
-#
-#  backprop_gradient = tensor_jacobian_product(mapping, 0)(x0, 0.5, 2, g0[:, 0])
-#  plt.imshow(np.rot90(backprop_gradient.reshape(Nx, Ny)))
-#  plt.colorbar()
-#
-#  evaluation_history = []
-#  cur_iter = [0]
-#
-#
-#  def f(v, gradient, cur_beta):
-#      print("Current iteration: {}".format(cur_iter[0]+1))
-#
-#      f0, dJ_du = opt([mapping(v, eta_i, cur_beta)])
-#
-#      plt.figure()
-#      ax = plt.gca()
-#      opt.plot2D(False, ax=ax, plot_sources_flag=False,
-#                 plot_monitors_flag=False, plot_boundaries_flag=False)
-#      ax.axis('off')
-#      plt.show()
-#
-#      if gradient.size > 0:
-#          gradient[:] = tensor_jacobian_product(mapping, 0)(
-#              v, eta_i, cur_beta, np.sum(dJ_du, axis=1))
-#
-#      evaluation_history.append(np.max(np.real(f0)))
-#
-#      cur_iter[0] = cur_iter[0] + 1
-#
-#      return np.real(f0)
-#
-#
-#  algorithm = nlopt.LD_MMA
-#  n = Nx * Ny  # number of parameters
-#
-#  # Initial guess
-#  x = np.ones((n,)) * 0.5
-#
-#  # lower and upper bounds
-#  lb = 0
-#  ub = 1
-#
-#  cur_beta = 4
-#  beta_scale = 2
-#  num_betas = 6
-#  update_factor = 12
-#  for iters in range(num_betas):
-#      print("current beta: ", cur_beta)
-#
-#      solver = nlopt.opt(algorithm, n)
-#      solver.set_lower_bounds(lb)
-#      solver.set_upper_bounds(ub)
-#      solver.set_max_objective(lambda a, g: f(a, g, cur_beta))
-#      solver.set_maxeval(update_factor)
-#      x[:] = solver.optimize(x)
-#      cur_beta = cur_beta*beta_scale
-#
-#  plt.figure()
-#  plt.plot(10*np.log10(0.5*np.array(evaluation_history)), 'o-')
-#  plt.grid(True)
-#  plt.xlabel('Iteration')
-#  plt.ylabel('Mean Splitting Ratio (dB)')
-#  plt.show()
-#
-#  f0, dJ_du = opt([mapping(x, eta_i, cur_beta)], need_gradient=False)
-#  frequencies = opt.frequencies
-#  source_coef, top_coef, bottom_ceof = opt.get_objective_arguments()
-#
-#  top_profile = np.abs(top_coef/source_coef) ** 2
-#  bottom_profile = np.abs(bottom_ceof/source_coef) ** 2
-#
-#  plt.figure()
-#  plt.plot(1/frequencies, top_profile*100, '-o', label='Top Arm')
-#  plt.plot(1/frequencies, bottom_profile*100, '--o', label='Bottom Arm')
-#  plt.legend()
-#  plt.grid(True)
-#  plt.xlabel('Wavelength (microns)')
-#  plt.ylabel('Splitting Ratio (%)')
-#  # plt.ylim(46.5,50)
-#  plt.show()
