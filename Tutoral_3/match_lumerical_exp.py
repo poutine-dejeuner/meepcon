@@ -17,13 +17,7 @@ PATH = os.path.expanduser(PATH)
 indices = np.load(os.path.join(PATH, 'indices.npy'))[0]
 
 
-# In[27]:
-
-
 zero_col = np.arange(indices.shape[1])[np.all(indices == indices[0], axis=0)]
-
-
-# In[28]:
 
 
 # Make channels file
@@ -40,15 +34,9 @@ plt.imshow(channels)
 np.save(os.path.join(PATH, 'channels.npy'), channels)
 
 
-# In[29]:
-
-
 top_channel_size = (len(top_lines), np.where(indices[0] == indmax)[0].shape[0]) 
 print(top_channel_size)
 lum_waveguide_len, lum_waveguide_wid = top_channel_size
-
-
-# In[30]:
 
 
 def trouver_centres(vecteur):
@@ -122,9 +110,104 @@ def get_sim_coeffs_from_flux_region(sim, fluxregion):
 lum_waveguide_len = lum_waveguide_len*ur.pixel
 lum_waveguide_wid = lum_waveguide_wid*ur.pixel
 
+# Lumerical script file
+# ## SIM PARAMS
+opt_size_x=3.5*ur.micrometer
+opt_size_y=3.5*ur.micrometer
+size_x=opt_size_x+0.6*ur.micrometer
+size_y=opt_size_y+1*ur.micrometer
+out_wg_dist = 1.25*ur.micrometer
+wg_width = 0.5*ur.micrometer
+mode_width = 3*wg_width
+wg_index = 2.8
+bg_index = 1.44
+dx = 20*ur.nanometer
 
-# In[37]:
+# ## GEOMETRY
+# #INPUT WAVEGUIDE
+# addrect;
+# set('name','input wg');
+# set('x min',-size_x);
+# set('x max',-opt_size_x/2 + 1e-7);
+# set('y',0);
+# set('y span',wg_width);
+# set('z',0);
+# set('z span',220e-9);
+# set('index',wg_index);
 
+# ## OUTPUT WAVEGUIDES
+# addrect;
+# set('name','output wg top');
+# set('x min',opt_size_x/2 - 1e-7);
+# set('x max',size_x);
+# set('y',out_wg_dist);
+# set('y span',wg_width);
+# set('z',0);
+# set('z span',220e-9);
+# set('index',wg_index);
+
+# addrect;
+# set('name','output wg bottom');
+# set('x min',opt_size_x/2 - 1e-7);
+# set('x max',size_x);
+# set('y',-out_wg_dist);
+# set('y span',wg_width);
+# set('z',0);
+# set('z span',220e-9);
+# set('index',wg_index);
+
+# ## SOURCE
+# addmode;
+# set('direction','Forward');
+# set('injection axis','x-axis');
+# set('x',-size_x/2 + 1e-7);
+# set('y',0);
+# set('y span',mode_width);
+# set('z',0);
+# set('z span',1e-6);
+# set('center wavelength',1550e-9);
+# set('wavelength span',0);
+# set('mode selection','fundamental TE mode');
+
+# ## FDTD
+# addfdtd;
+# set('dimension','2D');
+# set('background index',bg_index);
+# set('mesh accuracy',4);
+# set('x min',-size_x/2);
+# set('x max',size_x/2);
+# set('y min',-size_y/2);
+# set('y max',size_y/2);
+# set('y min bc','anti-symmetric');
+# #set('force symmetric y mesh',1);
+# set('auto shutoff min',1e-7);
+
+# ## OPTIMIZATION FIELDS MONITOR IN OPTIMIZABLE REGION
+# addpower;
+# set('name','opt_fields');
+# set('monitor type','2D Z-normal');
+# set('x',0);
+# set('x span',opt_size_x);
+# set('y min',0);
+# set('y max',opt_size_y/2);
+
+# ## FOM FIELDS
+# addpower;
+# set('name','fom');
+# set('monitor type','2D X-normal');
+# set('x',size_x/2 - 1e-7);
+# set('y',out_wg_dist);
+# set('y span',mode_width);
+# addmesh;
+# set('name','fom_mesh');
+# set('override x mesh',true);
+# set('dx',dx);
+# set('override y mesh',false);
+# set('override z mesh',false);
+# set('x',size_x/2 - 1e-7);
+# set('x span',2*dx);
+# set('y',out_wg_dist);
+# set('y span',mode_width);
 
 # Lumerical experiment setup
 # Dimensions definition
@@ -146,15 +229,9 @@ y_pos = np.linspace(0, size_y.magnitude, y_points.magnitude) * 1e-9
 lum_source_wavelength = 1550*ur.nanometer
 
 
-# In[38]:
-
-
 c1, c2 = trouver_centres(indices[-1])
 lum_arm_sep = (c2 - c1)*ur.pixel
 print(lum_arm_sep)
-
-
-# In[39]:
 
 
 seed = 240
@@ -166,21 +243,15 @@ delta = delta_x.to(ur.micrometers/ur.pixel) #(0.02)*ur.micrometers  size of a pi
 # resolution = 20 # (pixels/μm)
 resolution = 1/delta # pixels/μm
 waveguide_width = (delta_y * lum_waveguide_wid).to(ur.micrometer) #0.5 # (μm)
-design_region_width = size_x.to(ur.micrometer)  + delta*ur.pixel # (μm)
+design_region_width = size_x.to(ur.micrometer) + delta*ur.pixel # (μm)
 design_region_height = (2*size_y).to(ur.micrometer) + delta*ur.pixel # (μm)
 arm_separation = (lum_arm_sep*delta_y).to(ur.micrometer) #1.0  (μm) distance between arms center to center
 waveguide_length = (lum_waveguide_len*delta).to(ur.micrometer) #0.5  (μm)
 pml_size = 1.0 # (μm)
 
 
-# In[40]:
-
-
 from icecream import ic
 ic(resolution, waveguide_length, waveguide_width, design_region_height, design_region_width, arm_separation)
-
-
-# In[41]:
 
 
 delta = delta.magnitude
@@ -193,9 +264,6 @@ waveguide_length = waveguide_length.magnitude
 
 
 # ## Design variable setup
-
-# In[42]:
-
 
 minimum_length = 0.09 # (μm)
 eta_e = 0.75
@@ -212,13 +280,8 @@ design_variables = mp.MaterialGrid(mp.Vector3(Nx,Ny),SiO2,Si)
 design_region = mpa.DesignRegion(design_variables,
     volume=mp.Volume(center=mp.Vector3(), size=mp.Vector3(design_region_width, design_region_height)))
 
-Nx, Ny
-
 
 # ## Simulation Setup
-
-# In[68]:
-
 
 Sx = 2*pml_size + 2*waveguide_length + design_region_width # cell size in X
 Sy = 2*pml_size + design_region_height + 0.5 # cell size in Y
@@ -240,7 +303,7 @@ source = [mp.EigenModeSource(src,
                             eig_kpoint=kpoint,
                             size=source_size,
                             center=source_center,
-                            eig_parity=mp.ODD_Z+mp.EVEN_Y)]
+                            eig_parity=mp.EVEN_Z+mp.ODD_Y)]
 
 # source = [mp.Source(mp.ContinuousSource(frequency=0.15,
 #                                         end_time=100),
@@ -267,16 +330,11 @@ sim = mp.Simulation(cell_size=cell_size,
 
 # ## Design parameter mapping
 
-# In[69]:
-
-
-# In[70]:
-
-
 PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
 # PATH = os.path.expanduser('~/scratch/nanophoto/highfom/')
 images = np.load(os.path.join(PATH, 'images.npy'))
 foms = np.load(os.path.join(PATH, 'fom.npy'))
+meepfom = []
 err = []
 for image_idx in tqdm(range(100)):
     image = images[image_idx]
@@ -295,9 +353,6 @@ for image_idx in tqdm(range(100)):
     source_coeffs, source_flux_spectrum = get_sim_coeffs_from_flux_region(sim, fluxregion)
 
 
-    # In[72]:
-
-
     # Get top output flux coefficients
     topmoncenter = mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3, arm_separation/2, 0)
     topfluxregion = mp.FluxRegion(topmoncenter, monsize)
@@ -306,12 +361,12 @@ for image_idx in tqdm(range(100)):
     FOM2 = (top_flux_spectrum[0])/source_flux_spectrum[0] 
     error = np.abs(FOM2 - foms[image_idx])
     err.append(error)
+    meepfom.append(FOM2)
     ic(FOM2)
     ic(error)
 
 plt.hist(err, bins=10)
 plt.savefig('errhist.png')
 err = np.array(err)
-np.save('meepfom.npy')
-
-
+np.save('meepfom.npy', meepfom)
+np.save('meeperror.npy', err)
