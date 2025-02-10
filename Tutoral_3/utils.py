@@ -12,3 +12,9 @@ def double_with_mirror(image):
 def normalise(image):
     image = (image - image.min()) / (image.max() - image.min())
     return image
+
+def npstats(arr):
+    print('mean', np.mean(arr))
+    print('std', np.std(arr))
+    print('min', np.min(arr))
+    print('max', np.max(arr))
