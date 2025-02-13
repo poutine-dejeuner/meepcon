@@ -16,6 +16,8 @@ from icecream import ic
 from utils import double_with_mirror, normalise
 
 
+
+
 def mesurer_memoire_fonction(func):
     """
     Décore une fonction pour mesurer son utilisation de mémoire.
@@ -250,7 +252,7 @@ def compute_FOM(image):
                                                                 1e-9))
         # res = sim.get_eigenmode_coefficients(flux, [1])
         res = sim.get_eigenmode_coefficients(flux, [1],
-                                            eig_parity=mp.ODD_Z + mp.EVEN_Y)
+                                             eig_parity=mp.EVEN_Z+mp.ODD_Y)
         coeffs = res.alpha
         return coeffs
 
@@ -276,24 +278,26 @@ def compute_FOM(image):
                                                                 mon_pt,
                                                                 1e-9))
         res = sim.get_eigenmode_coefficients(flux, [1])
-        # res = sim.get_eigenmode_coefficients(flux, [1],
-        #                                     eig_parity=mp.ODD_Z + mp.EVEN_Y))
         coeffs = res.alpha
         accumulated_flux_spectrum = mp.get_fluxes(flux)
         return coeffs, accumulated_flux_spectrum
 
     # Get incident flux coefficients
-    source_mon_pt = mp.Vector3(x=source_x + 0.1)
-    monsize = mp.Vector3(y=3*waveguide_width)
-    source_fluxregion = mp.FluxRegion(center=source_mon_pt, size=monsize)
-    src_coeffs = get_eigenmode_coeffs(sim, source_fluxregion)
+    # source_mon_pt = mp.Vector3(x=source_x + 0.1)
+    # monsize = mp.Vector3(y=3*waveguide_width)
+    # source_fluxregion = mp.FluxRegion(center=source_mon_pt, size=monsize)
+    # src_coeffs = get_eigenmode_coeffs(sim, source_fluxregion)
+
+    # the np.abs(src_coeffs[0,0,0])**2 was previously computed as
+    abs_src_coeff = 57.97435797757672
 
     # Get top output flux coefficients
     topmoncenter = mp.Vector3(size_x/2, arm_separation, 0)
     topfluxregion = mp.FluxRegion(topmoncenter, monsize)
     top_coeffs = get_eigenmode_coeffs(sim, topfluxregion)
 
-    fom1 = np.abs(top_coeffs[0, 0, 0])**2/np.abs(src_coeffs[0, 0, 0])**2
+    # fom1 = np.abs(top_coeffs[0, 0, 0])**2/np.abs(src_coeffs[0, 0, 0])**2
+    fom1 = np.abs(top_coeffs[0, 0, 0])**2/abs_src_coeff
     return fom1
 
 
@@ -317,6 +321,40 @@ def meep_lumerical_comparison_experiment(num_samples=100):
     plt.savefig(f'{image_idx}.png')
 
 
+def compute_FOM_and_gradients(sim, top_eigenmode_mon):
+    import autograd.numpy as npa
+    mode = 1
+    # TE0 = mpa.EigenmodeCoefficient(sim,
+    #         mp.Volume(center=mp.Vector3(x=-Sx/2 + pml_size + 2*waveguide_length/3),
+    #             size=mp.Vector3(y=1.5)),mode)
+    # TE_top = mpa.EigenmodeCoefficient(sim,
+    #         mp.Volume(center=mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3,arm_separation/2,0),
+    #             size=mp.Vector3(y=arm_separation)),mode)
+    # TE_bottom = mpa.EigenmodeCoefficient(sim,
+    #         mp.Volume(center=mp.Vector3(Sx/2 - pml_size - 2*waveguide_length/3,-arm_separation/2,0),
+    #             size=mp.Vector3(y=arm_separation)),mode)
+    # ob_list = [TE0,TE_top,TE_bottom]
+
+    # def J(source,top,bottom):
+    #     power = npa.abs(top/source) ** 2 + npa.abs(bottom/source) ** 2
+    #     return npa.mean(power)
+    center = top_eigenmode_mon['center']
+    size = top_eigenmode_mon['size']
+    volume = mp.Volume(center=center, size=size)
+    ob_list = [mpa.EigenmodeCoefficient(sim, volume, mode)]
+    def J(top):
+        return npa.mean(npa.abs(top)**2)
+
+    opt = mpa.OptimizationProblem(
+        simulation=sim,
+        objective_functions=J,
+        objective_arguments=ob_list,
+        design_regions=[design_region],
+        frequencies=frequencies
+    )
+    opt.plot2D(True)
+
+
 if __name__ == '__main__':
     PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
 
@@ -329,7 +367,7 @@ if __name__ == '__main__':
         ic(t1-t0)
 
     def test_parallel_comp():
-        num_eval = 6
+        num_eval = 2
         images = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')
         images = images[:num_eval]
         t0 = timeit.default_timer()
