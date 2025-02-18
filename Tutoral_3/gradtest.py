@@ -209,12 +209,11 @@ def mapping(x, eta, beta):
     return projected_field.flatten()
 
 
-PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
-image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
-
-idx_map = double_with_mirror(image)
-idx_map = normalise(idx_map)
-index_map = mapping(idx_map, 0.5, 256)
+# PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
+# image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
+# idx_map = double_with_mirror(image)
+# idx_map = normalise(idx_map)
+# index_map = mapping(idx_map, 0.5, 256)
 
 mode = 1
 
@@ -231,11 +230,12 @@ opt = mpa.OptimizationProblem(
     design_regions=[design_region],
     frequencies=frequencies
 )
+# f0, g0 = opt()
+# breakpoint()
 x0 = 0.5*np.ones((Nx,Ny))
-breakpoint()
 f0, g0 = opt([mapping(x0,0.5,2)])
-ic(g0.shape)
-f0, g0 = opt([index_map])
+# ic(g0.shape)
+# f0, g0 = opt([index_map])
 
 plt.figure()
 print(g0.shape)
