@@ -220,12 +220,11 @@ def mapping(x, eta, beta):
     return projected_field.flatten()
 
 
-PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
-image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
-
-idx_map = double_with_mirror(image)
-idx_map = normalise(idx_map)
-index_map = mapping(idx_map, 0.5, 256)
+# PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
+# image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
+# idx_map = double_with_mirror(image)
+# idx_map = normalise(idx_map)
+# index_map = mapping(idx_map, 0.5, 256)
 
 mode = 1
 
