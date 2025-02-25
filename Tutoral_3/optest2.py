@@ -14,13 +14,6 @@ from icecream import ic
 from utils import double_with_mirror, normalise
 
 
-
-
-# @mesurer_memoire_fonction
-# mem max utilisee 11MB
-
-# t0 = timeit.default_timer()
-# ## Basic environment setup
 pml_size = 1.0  # (μm)
 
 dx = 0.02
@@ -28,38 +21,11 @@ opt_size_x = 101 * dx
 opt_size_y = 181 * dx
 size_x = 2.6 + pml_size  # um
 size_y = 4.5 + pml_size  # um
-# size_x = opt_size_x + 2*0.4
-# size_y = opt_size_y + 2*0.4
 out_wg_dist = 1.25
 wg_width = 0.5
 mode_width = 3*wg_width
 wg_index = 2.8
 bg_index = 1.44
-# wg_zspan = 0.22
-
-# opt_xpixel = opt_size_x*(1/dx)
-# opt_ypixel = opt_size_y*(1/dx)
-
-# source_wg_xmin = -size_x
-# source_wg_xmax = -opt_size_x/2 + 0.1
-# source_wg_y = 0
-# source_wg_yspan = wg_width
-# source_wg_z = 0
-# source_wg_zspan = wg_zspan
-
-# top_wg_xmin = opt_size_x/2 - 0.1
-# top_wg_xmax = size_x
-# top_wg_y = out_wg_dist
-# top_wg_yspan = wg_width
-# top_wg_z = 0
-# top_wg_zspan = wg_zspan
-
-# bot_wg_xmin = top_wg_xmin
-# bot_wg_xmax = top_wg_xmax
-# bot_wg_y = -out_wg_dist
-# bot_wg_yspan = wg_width
-# bot_wg_z = 0
-# bot_wg_zspan = wg_zspan
 
 source_x = -size_x/2 - 0.1
 source_y = 0
@@ -158,22 +124,7 @@ sim = mp.Simulation(cell_size=cell_size,
                     resolution=resolution,
                     force_all_components=True)
 
-
-# idx_map = double_with_mirror(image)
-# idx_map = normalise(idx_map)
-# index_map = mapping(idx_map, 0.5, 256)
-# design_region.update_design_parameters(index_map)
-
-# full field monitor
 size = mp.Vector3(Sx, Sy, 0)
-# dft_monitor = sim.add_dft_fields(
-#     [mp.Ex, mp.Ey, mp.Ez],             # Components to monitor
-#     fcen, 0, 1,
-#     # frequency=fcen,                     # Operating frequency
-#     center=mp.Vector3(0, 0, 0),        # Center of the monitor region
-#     size=size          # Size of the monitor region
-# )
-
 monsize = mp.Vector3(y=3*waveguide_width)
 source_mon_center = mp.Vector3(x=source_x + 0.1)
 top_mon_center = mp.Vector3(size_x/2, arm_separation, 0)
@@ -184,14 +135,6 @@ top_fluxregion = mp.FluxRegion(center=top_mon_center,
                                size=monsize,
                                weight=-1)
 
-# t0 = time.process_time()
-# flux = sim.add_flux(fcen, 0, 1, top_fluxregion)
-# sim.run(until_after_sources=100)
-# t1 = time.process_time()
-# print('test forward')
-# ic(t1-t0)
-
-# the np.abs(src_coeffs[0,0,0])**2 was previously computed as
 abs_src_coeff = 57.97435797757672
 
 # Get top output flux coefficients
@@ -219,13 +162,6 @@ def mapping(x, eta, beta):
     projected_field = mpa.tanh_projection(filtered_field, beta, eta)
     return projected_field.flatten()
 
-
-PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
-image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
-idx_map = double_with_mirror(image)
-idx_map = normalise(idx_map)
-# index_map = mapping(idx_map, 0.5, 256)
-
 mode = 1
 
 volume = mp.Volume(center=topmoncenter, size=monsize)
@@ -242,21 +178,24 @@ opt = mpa.OptimizationProblem(
     frequencies=frequencies
 )
 
-x0 = idx_map
-t0 = time.process_time()
-f0, g0 = opt([mapping(x0, 0.5, 256)])
-t1 = time.process_time()
-ic(t1-t0)
-ic(g0.shape)
+# PATH = os.path.expanduser('~/scratch/nanophoto/lowfom/nodata/fields/')
+# image = np.load(os.path.join(PATH, 'images.npy'), mmap_mode='r')[0]
+# idx_map = double_with_mirror(image)
+# idx_map = normalise(idx_map)
+# # index_map = mapping(idx_map, 0.5, 256)
+# x0 = idx_map
 
-plt.figure()
-print(g0.shape)
-plt.imshow(np.rot90(g0[:, 0].reshape(Nx, Ny)))
-plt.colorbar()
-plt.savefig('grad0.png')
-plt.clf()
+num_loops = 3
+lr = 0.1
+x0 = np.ones(Nx, Ny)*0.5
+for i in range(num_loops):
+    f0, g0 = opt([mapping(x0, 0.5, 256)])
+    backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
+    backprop_gradient = backprop_gradient.reshape(Nx,Ny)
+    x0 = x0 + lr*backprop_gradient
 
-backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
-plt.imshow(np.rot90(backprop_gradient.reshape(Nx,Ny)))
-plt.colorbar()
-plt.savefig('grad1.png')
+    plt.figure()
+    plt.imshow(np.rot90(x0))
+    plt.colorbar()
+    plt.savefig(f'opt{i}.png')
+    plt.clf()
