@@ -42,7 +42,7 @@ def mesurer_memoire_fonction(func):
     return wrapper
 
 
-def compute_FOM_parallele(images, num_processes):
+def compute_FOM_parallele(images):
     images = [images[i] for i in range(images.shape[0])]
     ic(multiprocessing.cpu_count())
     with multiprocessing.Pool() as pool:

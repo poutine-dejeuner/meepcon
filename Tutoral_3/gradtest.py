@@ -1,10 +1,12 @@
 import os
+import time
 
 import meep as mp
 # print(mp.__version__)
 import meep.adjoint as mpa
 import numpy as np
 import autograd.numpy as npa
+from autograd import tensor_jacobian_product
 
 from matplotlib import pyplot as plt
 from icecream import ic
@@ -94,6 +96,7 @@ frequencies = 1/np.linspace(1.5, 1.6, 5)  # (1/μm)
 
 Nx = int(design_region_resolution*design_region_width)
 Ny = int(design_region_resolution*design_region_height)
+ic(Nx, Ny)
 
 design_variables = mp.MaterialGrid(mp.Vector3(Nx, Ny), SiO2, Si)
 size = mp.Vector3(design_region_width, design_region_height)
@@ -104,6 +107,8 @@ design_region = mpa.DesignRegion(design_variables, volume=volume)
 
 Sx = 2*pml_size + size_x  # cell size in X
 Sy = 2*pml_size + size_y  # cell size in Y
+ic(Sx, Sy)
+ic(Sx*resolution, Sy*resolution)
 cell_size = mp.Vector3(Sx, Sy)
 
 pml_layers = [mp.PML(pml_size)]
@@ -150,7 +155,8 @@ sim = mp.Simulation(cell_size=cell_size,
                     sources=source,
                     # symmetries=[mp.Mirror(direction=mp.Y)],
                     default_material=SiO2,
-                    resolution=resolution)
+                    resolution=resolution,
+                    force_all_components=True)
 
 
 # idx_map = double_with_mirror(image)
@@ -178,7 +184,12 @@ top_fluxregion = mp.FluxRegion(center=top_mon_center,
                                size=monsize,
                                weight=-1)
 
+# t0 = time.process_time()
+# flux = sim.add_flux(fcen, 0, 1, top_fluxregion)
 # sim.run(until_after_sources=100)
+# t1 = time.process_time()
+# print('test forward')
+# ic(t1-t0)
 
 # the np.abs(src_coeffs[0,0,0])**2 was previously computed as
 abs_src_coeff = 57.97435797757672
@@ -231,14 +242,22 @@ opt = mpa.OptimizationProblem(
     design_regions=[design_region],
     frequencies=frequencies
 )
-x0 = 0.5*np.ones((Nx,Ny))
-breakpoint()
-f0, g0 = opt([mapping(x0,0.5,2)])
+
+x0 = idx_map
+t0 = time.process_time()
+f0, g0 = opt([mapping(x0, 0.5, 256)])
+t1 = time.process_time()
+ic(t1-t0)
 ic(g0.shape)
-f0, g0 = opt([index_map])
 
 plt.figure()
 print(g0.shape)
 plt.imshow(np.rot90(g0[:, 0].reshape(Nx, Ny)))
 plt.colorbar()
-plt.savefig('grad.png')
+plt.savefig('grad0.png')
+plt.clf()
+
+backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
+plt.imshow(np.rot90(backprop_gradient.reshape(Nx,Ny)))
+plt.colorbar()
+plt.savefig('grad1.png')
