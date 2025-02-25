@@ -2,7 +2,6 @@ import os
 import time
 
 import meep as mp
-# print(mp.__version__)
 import meep.adjoint as mpa
 import numpy as np
 import autograd.numpy as npa
@@ -11,7 +10,7 @@ from autograd import tensor_jacobian_product
 from matplotlib import pyplot as plt
 from icecream import ic
 
-from utils import double_with_mirror, normalise
+from utils import double_with_mirror, normalise, smooth_image
 
 
 pml_size = 1.0  # (μm)
@@ -62,7 +61,6 @@ frequencies = 1/np.linspace(1.5, 1.6, 5)  # (1/μm)
 
 Nx = int(design_region_resolution*design_region_width)
 Ny = int(design_region_resolution*design_region_height)
-ic(Nx, Ny)
 
 design_variables = mp.MaterialGrid(mp.Vector3(Nx, Ny), SiO2, Si)
 size = mp.Vector3(design_region_width, design_region_height)
@@ -73,8 +71,6 @@ design_region = mpa.DesignRegion(design_variables, volume=volume)
 
 Sx = 2*pml_size + size_x  # cell size in X
 Sy = 2*pml_size + size_y  # cell size in Y
-ic(Sx, Sy)
-ic(Sx*resolution, Sy*resolution)
 cell_size = mp.Vector3(Sx, Sy)
 
 pml_layers = [mp.PML(pml_size)]
@@ -141,18 +137,6 @@ abs_src_coeff = 57.97435797757672
 topmoncenter = mp.Vector3(size_x/2, arm_separation, 0)
 topfluxregion = mp.FluxRegion(topmoncenter, monsize)
 
-def double_with_mirror(image):
-    channels = '~/scratch/nanophoto/lowfom/nodata/fields/channels.npy'
-    channels = np.load(os.path.expanduser(channels))
-    mirrored_image = np.fliplr(image)  # Crée l'image miroir
-    doubled_image = np.concatenate((mirrored_image[:, :-1], image), axis=1)
-    return doubled_image
-
-
-def normalise(image):
-    image = (image - image.min()) / (image.max() - image.min())
-    return image
-
 
 def mapping(x, eta, beta):
     x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2  # up-down symmetry
@@ -185,17 +169,54 @@ opt = mpa.OptimizationProblem(
 # # index_map = mapping(idx_map, 0.5, 256)
 # x0 = idx_map
 
-num_loops = 3
-lr = 0.1
-x0 = np.ones(Nx, Ny)*0.5
-for i in range(num_loops):
-    f0, g0 = opt([mapping(x0, 0.5, 256)])
-    backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
-    backprop_gradient = backprop_gradient.reshape(Nx,Ny)
-    x0 = x0 + lr*backprop_gradient
+def sigmoid(z):
+    return 1/(1 + np.exp(-z))
 
+def stats(x: np.array):
+    ic(x.min(), x.max(), x.mean())
+
+
+def save_img(image, idx):
+    ic('sauvage')
     plt.figure()
-    plt.imshow(np.rot90(x0))
+    plt.imshow(np.rot90(image), vmin=0, vmax=1)
     plt.colorbar()
-    plt.savefig(f'opt{i}.png')
+    plt.axis('off')
+    plt.savefig(f'figures/opt{idx}.png')
     plt.clf()
+
+num_loops = 10
+lr = 1e17
+# x0 = np.ones((Nx, Ny))*0.5
+x0 = np.random.rand(Nx, Ny)
+x0 = smooth_image(x0, 20)
+save_img(x0, -1)
+
+if not os.path.exists('figures'):
+    os.makedirs('figures')
+fom_sequence = []
+for i in range(num_loops):
+    t0 = time.process_time()
+    print(f"{i}-th optim loop")
+    # delta_slope = 1
+    # slope = delta_slope*i
+    # x0 = sigmoid(x0*slope)
+
+    f0, g0 = opt([mapping(x0, 0.5, 256)])
+
+    print('FOM')
+    ic(f0)
+    fom_sequence.append(f0)
+    backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
+    backprop_gradient = backprop_gradient.reshape(Nx, Ny)
+    print('gradient')
+    stats(backprop_gradient)
+    x0 = x0 + lr*backprop_gradient
+    print('x0 apres grad step')
+    stats(x0)
+    save_img(x0, i)
+
+    plt.plot(np.stack(fom_sequence))
+    plt.savefig('figures/fomcurve.png')
+    t1 = time.process_time()
+    ic(t1-t0)
