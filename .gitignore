@@ -1,3 +1,6 @@
+slurm/
+jobs/
+fomopt-v*/
 *.out
 .vscode/
 *.png

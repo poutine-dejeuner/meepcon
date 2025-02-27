@@ -1,5 +1,7 @@
 import os
 import time
+import argparse
+import yaml
 
 import meep as mp
 import meep.adjoint as mpa
@@ -10,8 +12,46 @@ from autograd import tensor_jacobian_product
 from matplotlib import pyplot as plt
 from icecream import ic
 
-from utils import double_with_mirror, normalise, smooth_image
+from utils import (double_with_mirror, normalise, smooth_image,
+                   entgrad_genre)
+from calculFOM import compute_FOM
 
+
+def sigmoid(z):
+    return 1/(1 + np.exp(-z))
+
+
+def stats(x: np.array):
+    ic(x.min(), x.max(), x.mean())
+
+
+def save_img(image, idx, savepath):
+    os.makedirs(os.path.join(savepath, 'figures'), exist_ok=True)
+    plt.figure()
+    plt.imshow(np.rot90(image), vmin=0, vmax=1)
+    plt.colorbar()
+    plt.axis('off')
+    path = os.path.join(savepath,f'figures/opt{idx}.png') 
+    plt.savefig(path)
+    plt.clf()
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-lr_fom', type=float, default=1e17)
+parser.add_argument('-lr_ent', type=float, default=0.1)
+parser.add_argument('-fom_phase', type=int, default=10)
+parser.add_argument('-ent_phase', type=int, default=100)
+parser.add_argument('-d', action='store_true', default=False)
+args = parser.parse_args()
+debug = args.d
+
+jobid = os.environ['SLURM_JOB_ID'] if debug is False else 'debug'
+savepath = os.path.join('jobs', jobid)
+os.makedirs(savepath, exist_ok=True)
+args_dict = vars(args)
+fichier = os.path.join(savepath, 'config.yml') 
+with open(fichier, 'w') as f:
+    yaml.dump(args_dict, f)
 
 pml_size = 1.0  # (μm)
 
@@ -169,54 +209,43 @@ opt = mpa.OptimizationProblem(
 # # index_map = mapping(idx_map, 0.5, 256)
 # x0 = idx_map
 
-def sigmoid(z):
-    return 1/(1 + np.exp(-z))
 
-def stats(x: np.array):
-    ic(x.min(), x.max(), x.mean())
-
-
-def save_img(image, idx):
-    ic('sauvage')
-    plt.figure()
-    plt.imshow(np.rot90(image), vmin=0, vmax=1)
-    plt.colorbar()
-    plt.axis('off')
-    plt.savefig(f'figures/opt{idx}.png')
-    plt.clf()
-
-num_loops = 10
-lr = 1e17
+lr_fom = args.lr_fom
+lr_ent = args.lr_ent
+fom_phase = args.fom_phase
+ent_phase = args.ent_phase
+if debug is True:
+    fom_phase=ent_phase=1
+num_loops = fom_phase + ent_phase
 # x0 = np.ones((Nx, Ny))*0.5
 x0 = np.random.rand(Nx, Ny)
 x0 = smooth_image(x0, 20)
-save_img(x0, -1)
+save_img(x0, -1, savepath)
 
-if not os.path.exists('figures'):
-    os.makedirs('figures')
 fom_sequence = []
 for i in range(num_loops):
     t0 = time.process_time()
     print(f"{i}-th optim loop")
-    # delta_slope = 1
-    # slope = delta_slope*i
-    # x0 = sigmoid(x0*slope)
-
     f0, g0 = opt([mapping(x0, 0.5, 256)])
-
     print('FOM')
     ic(f0)
+
     fom_sequence.append(f0)
-    backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])
+    backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:, 0])
     backprop_gradient = backprop_gradient.reshape(Nx, Ny)
+    ic(np.linalg.norm(backprop_gradient))
     print('gradient')
     stats(backprop_gradient)
-    x0 = x0 + lr*backprop_gradient
+    x0 = x0 + lr_fom*backprop_gradient 
+    if i > fom_phase:
+        x0 = x0 - lr_ent*entgrad_genre(x0)
     print('x0 apres grad step')
     stats(x0)
-    save_img(x0, i)
+    save_img(x0, i, savepath)
 
     plt.plot(np.stack(fom_sequence))
-    plt.savefig('figures/fomcurve.png')
+    path = os.path.join(savepath, 'figures/fomcurve.png')
+    plt.savefig(path)
     t1 = time.process_time()
     ic(t1-t0)
+ic(compute_FOM(x0[:, 90:]))

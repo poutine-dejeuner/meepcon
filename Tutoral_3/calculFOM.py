@@ -16,8 +16,6 @@ from icecream import ic
 from utils import double_with_mirror, normalise
 
 
-
-
 def mesurer_memoire_fonction(func):
     """
     Décore une fonction pour mesurer son utilisation de mémoire.
@@ -63,6 +61,7 @@ def compute_FOM_array(images):
 # @mesurer_memoire_fonction
 # mem max utilisee 11MB
 def compute_FOM(image):
+    assert image.shape == (101, 91)
     # t0 = timeit.default_timer()
     # ## Basic environment setup
     pml_size = 1.0  # (μm)

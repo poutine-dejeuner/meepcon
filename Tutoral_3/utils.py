@@ -5,6 +5,12 @@ from icecream import ic
 from scipy.signal import convolve2d
 
 
+def entgrad_genre(x):
+    x = np.clip(x, 0, 1)
+    out = np.sin(2*np.pi*x)
+    return out
+
+
 def smooth_image_fft(image, sigma, resolution=30):
     """
     Takes the convlution of an image with a gaussian with variance sigma.
