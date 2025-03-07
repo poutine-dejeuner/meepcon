@@ -2,6 +2,8 @@ import os
 import time
 import argparse
 import yaml
+from datetime import datetime
+from tqdm import tqdm
 
 import meep as mp
 import meep.adjoint as mpa
@@ -11,17 +13,26 @@ from autograd import tensor_jacobian_product
 
 from matplotlib import pyplot as plt
 from icecream import ic
-from orion.client import report_objective
+# from orion.client import report_objective
 
 from utils import (double_with_mirror, normalise, smooth_image,
                    entgrad_genre)
 from computeFOM import compute_FOM
 
 
+mp.verbosity.set(0)
+
+
 def mirror_upper_y_half(x):
-    # x = 
-    x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2
-    return
+    half = int(x.shape[1]/2) 
+    upper_half = x[:,half:] 
+    if x.shape[1]%2 == 0:
+        out = np.concatenate([np.fliplr(upper_half), upper_half], axis=1)
+    if x.shape[1]%2 == 1:
+        # si ou a x est de taille impaire en y, on ne repete pas la ligne du
+        # milieu
+        out = np.concatenate([np.fliplr(upper_half)[:, :-1], upper_half], axis=1)
+    return out
 
 
 def sigmoid(z):
@@ -42,9 +53,15 @@ def save_img(image, idx, savepath):
     plt.savefig(path)
     plt.clf()
 
+class MappingClass:
+    def __init__(self, **sim_kwargs):
+        self.sim_kwargs = sim_kwargs
+
+    def __call__(self, x, eta, beta): 
+        return mapping(x, eta, beta, **self.sim_kwargs)
 
 def mapping(x, eta, beta, filter_radius, design_region_width,
-            design_region_height, design_region_resolution):
+            design_region_height, design_region_resolution, **kwargs):
     # up-down symmetry
     Nx, Ny = x.shape
     x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2
@@ -105,7 +122,6 @@ def pogne_opt(args):
 
     Nx = int(design_region_resolution*design_region_width)
     Ny = int(design_region_resolution*design_region_height)
-    ic(Nx, Ny)
 
     design_variables = mp.MaterialGrid(mp.Vector3(Nx, Ny), SiO2, Si)
     size = mp.Vector3(design_region_width, design_region_height)
@@ -282,7 +298,7 @@ def avec_nlopt(opt, sim_args):
     plt.ylabel('Mean Splitting Ratio (dB)')
     plt.show()
 
-    f0, dJ_du = opt([mapping(x, eta_i, cur_beta)], need_gradient=False)
+    f0, dJ_du = opt([mapping(x, eta_i, cur_beta, **sim_args)], need_gradient=False)
     frequencies = opt.frequencies
     source_coef, top_coef, bottom_ceof = opt.get_objective_arguments()
 
@@ -299,15 +315,16 @@ def avec_nlopt(opt, sim_args):
     # plt.ylim(46.5,50)
     plt.show()
 
-def ascencion_gradient_a_la_main(opt, sim_args):
-    Nx = sim_args['Nx']
-    Ny = sim_args['Ny']
+def ascencion_gradient_a_la_main(opt, sim_args, opt_args, savepath):
+    Nx = sim_args.pop('Nx')
+    Ny = sim_args.pop('Ny')
+    mapping = MappingClass(**sim_args)
 
-
-    lr_fom = args.lr_fom
-    lr_ent = args.lr_ent
-    fom_phase = args.fom_phase
-    ent_phase = args.ent_phase
+    lr_fom = opt_args.lr_fom
+    lr_ent = opt_args.lr_ent
+    fom_phase = opt_args.fom_phase
+    ent_phase = opt_args.ent_phase
+    ic(opt_args)
     sigma = 20
     if debug is True:
         fom_phase = ent_phase = 1
@@ -319,24 +336,20 @@ def ascencion_gradient_a_la_main(opt, sim_args):
     save_img(x0, -1, savepath)
 
     fom_sequence = []
-    for i in range(num_loops):
+    for i in tqdm(range(num_loops)):
         t0 = time.process_time()
-        print(f"{i}-th optim loop")
-        f0, g0 = opt([mapping(x0, 0.5, 256)])
-        print('FOM')
-        ic(f0)
 
+        f0, g0 = opt([mapping(x0, 0.5, 256)])
         fom_sequence.append(f0)
+
         backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:, 0])
         backprop_gradient = backprop_gradient.reshape(Nx, Ny)
-        ic(np.linalg.norm(backprop_gradient))
         print('gradient')
-        stats(backprop_gradient)
         x0 = x0 + lr_fom*backprop_gradient
         if i > fom_phase:
             x0 = x0 - lr_ent*entgrad_genre(x0)
+        x0 = mirror_upper_y_half(x0)
         print('x0 apres grad step')
-        stats(x0)
         save_img(x0, i, savepath)
 
         plt.plot(np.stack(fom_sequence))
@@ -345,11 +358,12 @@ def ascencion_gradient_a_la_main(opt, sim_args):
         t1 = time.process_time()
         ic(t1-t0)
     fom = compute_FOM(x0[:, 90:])
-    report_objective(fom, 'FOM')
+    # report_objective(fom, 'FOM')
+    print(f'FOM final {fom}')
     return 
 
 
-if __name__ == "__main__":
+def optimisation_test():
     parser = argparse.ArgumentParser()
     parser.add_argument('-lr_fom', type=float, default=1e17)
     parser.add_argument('-lr_ent', type=float, default=0.1)
@@ -360,14 +374,31 @@ if __name__ == "__main__":
     global debug
     debug = args.d
 
-    jobid = os.environ['SLURM_JOB_ID'] if debug is False else 'debug'
-
-    savepath = os.path.join('figures', jobid)
+    # jobid = os.environ['SLURM_JOB_ID'] if debug is False else 'debug'
+    jobid = datetime.now().strftime("%m%d_%H%M")
+    savepath = os.path.join('runs', jobid)
     os.makedirs(savepath, exist_ok=True)
     args_dict = vars(args)
     fichier = os.path.join(savepath, 'config.yml')
     with open(fichier, 'w') as f:
         yaml.dump(args_dict, f)
-
     opt, sim_args = pogne_opt(args)
-    ascencion_gradient_a_la_main(opt, sim_args)
+
+    ascencion_gradient_a_la_main(opt, sim_args, args, savepath)
+
+
+def mirror_upper_half_test(): 
+    im = np.random.rand(190,205)
+    im = smooth_image(im)
+    im = im > 1/2
+
+    im1 = mirror_upper_y_half(im)
+    _, axes = plt.subplots(1,2)
+    axes[0].imshow(im)
+    axes[1].imshow(im1)
+    plt.show()
+
+
+if __name__ == "__main__":
+    # mirror_upper_half_test()
+    optimisation_test()
