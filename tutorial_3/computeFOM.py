@@ -193,15 +193,15 @@ def compute_FOM(image):
                         boundary_layers=pml_layers,
                         geometry=geometry,
                         sources=source,
-                        # symmetries=[mp.Mirror(direction=mp.Y)],
+                        symmetries=[mp.Mirror(direction=mp.Y)],
                         default_material=SiO2,
                         resolution=resolution)
     # t1 = timeit.default_timer()
     # ic('init sim', t1-t0)
 
     def mapping(x, eta, beta):
-
-        x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2  # up-down symmetry
+        # up-down symmetry
+        x = (npa.fliplr(x.reshape(Nx, Ny)) + x.reshape(Nx, Ny))/2
 
         # filter
         filtered_field = mpa.conic_filter(x, filter_radius, design_region_width,
@@ -282,13 +282,17 @@ def compute_FOM(image):
         return coeffs, accumulated_flux_spectrum
 
     # Get incident flux coefficients
-    # source_mon_pt = mp.Vector3(x=source_x + 0.1)
-    # monsize = mp.Vector3(y=3*waveguide_width)
-    # source_fluxregion = mp.FluxRegion(center=source_mon_pt, size=monsize)
-    # src_coeffs = get_eigenmode_coeffs(sim, source_fluxregion)
+    source_mon_pt = mp.Vector3(x=source_x + 0.1)
+    monsize = mp.Vector3(y=3*waveguide_width)
+    source_fluxregion = mp.FluxRegion(center=source_mon_pt, size=monsize)
+    src_coeffs = get_eigenmode_coeffs(sim, source_fluxregion)
+    ic(np.abs(src_coeffs[0,0,0])**2)
 
-    # the np.abs(src_coeffs[0,0,0])**2 was previously computed as
+    # on no symmetry setting the np.abs(src_coeffs[0,0,0])**2 was previously
+    # computed as
     abs_src_coeff = 57.97435797757672
+    # but with symmetries=[mp.Mirror(direction=mp.Y)], we instead get
+    # 31.632726229474404 ...
 
     # Get top output flux coefficients
     topmoncenter = mp.Vector3(size_x/2, arm_separation, 0)
@@ -297,6 +301,7 @@ def compute_FOM(image):
 
     # fom1 = np.abs(top_coeffs[0, 0, 0])**2/np.abs(src_coeffs[0, 0, 0])**2
     fom1 = np.abs(top_coeffs[0, 0, 0])**2/abs_src_coeff
+    ic(fom1)
     return fom1
 
 
@@ -375,4 +380,5 @@ if __name__ == '__main__':
         ic(t1-t0)
         ic(foms)
 
-    test_parallel_comp()
+    # test_parallel_comp()
+    test_meep_time()

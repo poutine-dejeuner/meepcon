@@ -1,4 +1,4 @@
-# import nlopt
+import nlopt
 from autograd import tensor_jacobian_product
 import autograd.numpy as npa
 from matplotlib import pyplot as plt

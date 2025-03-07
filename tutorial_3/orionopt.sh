@@ -3,9 +3,9 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=72:00:00
-#SBATCH --error=slurm/%A/serr/%a.err
-#SBATCH --output=slurm/%A/sout/%a.out
+#SBATCH --time=02:00:00
+#SBATCH --error=slurm/%A/%a/slurm.err
+#SBATCH --output=slurm/%A/%a/slurm.out
 
 module load miniconda/3
 conda activate /home/mila/l/letournv/miniconda3/envs/photo
