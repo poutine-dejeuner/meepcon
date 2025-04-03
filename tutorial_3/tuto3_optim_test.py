@@ -1,10 +1,18 @@
+import os
+
 import nlopt
 from autograd import tensor_jacobian_product
 import autograd.numpy as npa
 from matplotlib import pyplot as plt
 import numpy as np
+from scipy.signal import convolve2d
+
 import meep.adjoint as mpa
 import meep as mp
+
+from utils import normalise, smooth_image
+
+from icecream import ic
 
 
 # ## Basic environment setup
@@ -37,7 +45,9 @@ Ny = int(design_region_resolution*design_region_height)
 
 design_variables = mp.MaterialGrid(mp.Vector3(Nx, Ny), SiO2, Si)
 design_region = mpa.DesignRegion(design_variables,
-                                 volume=mp.Volume(center=mp.Vector3(), size=mp.Vector3(design_region_width, design_region_height)))
+                                 volume=mp.Volume(center=mp.Vector3(),
+                                     size=mp.Vector3(design_region_width,
+                                         design_region_height)))
 
 
 # ## Simulation Setup
@@ -135,19 +145,19 @@ opt.plot2D(True)
 
 
 # ## Gradient computation
-x0 = 0.5*np.ones((Nx, Ny))
-f0, g0 = opt([mapping(x0, 0.5, 2)])
+# x0 = 0.5*np.ones((Nx, Ny))
+# f0, g0 = opt([mapping(x0, 0.5, 2)])
 
 
-plt.figure()
-print(g0.shape)
-plt.imshow(np.rot90(g0[:, 0].reshape(Nx, Ny)))
-plt.colorbar()
+# plt.figure()
+# print(g0.shape)
+# plt.imshow(np.rot90(g0[:, 0].reshape(Nx, Ny)))
+# plt.colorbar()
 
 
-backprop_gradient = tensor_jacobian_product(mapping, 0)(x0, 0.5, 2, g0[:, 0])
-plt.imshow(np.rot90(backprop_gradient.reshape(Nx, Ny)))
-plt.colorbar()
+# backprop_gradient = tensor_jacobian_product(mapping, 0)(x0, 0.5, 2, g0[:, 0])
+# plt.imshow(np.rot90(backprop_gradient.reshape(Nx, Ny)))
+# plt.colorbar()
 
 
 # # Optimizer setup
@@ -165,11 +175,13 @@ def f(v, gradient, cur_beta):
     opt.plot2D(False, ax=ax, plot_sources_flag=False,
                plot_monitors_flag=False, plot_boundaries_flag=False)
     ax.axis('off')
-    plt.savefig(f'figures/{cur_iter[0]+1}.png')
+    plt.savefig(os.path.join(savepath, f'/{cur_iter[0]+1}.png'))
 
     if gradient.size > 0:
         gradient[:] = tensor_jacobian_product(mapping, 0)(
             v, eta_i, cur_beta, np.sum(dJ_du, axis=1))
+    ic(f0)
+    ic(gradient.max(), gradient.min(), gradient.mean())
 
     evaluation_history.append(np.max(np.real(f0)))
 
@@ -180,9 +192,17 @@ def f(v, gradient, cur_beta):
 
 algorithm = nlopt.LD_MMA
 n = Nx * Ny  # number of parameters
+os.makedirs('figures', exist_ok=True)
 
 # Initial guess
-x = np.ones((n,)) * 0.5
+x = np.random.rand(Nx, Ny)
+x = smooth_image(x)
+x = normalise(x)
+plt.imshow(x)
+plt.axis('off')
+plt.savefig(f'figures/{cur_iter[0]}.png')
+x = x.reshape(n)
+# x = np.ones((n,)) * 0.5
 
 # lower and upper bounds
 lb = 0
@@ -210,8 +230,6 @@ plt.plot(10*np.log10(0.5*np.array(evaluation_history)), 'o-')
 plt.grid(True)
 plt.xlabel('Iteration')
 plt.ylabel('Mean Splitting Ratio (dB)')
-plt.savefig(f'figures/final.png')
-
 f0, dJ_du = opt([mapping(x, eta_i, cur_beta)], need_gradient=False)
 frequencies = opt.frequencies
 source_coef, top_coef, bottom_ceof = opt.get_objective_arguments()

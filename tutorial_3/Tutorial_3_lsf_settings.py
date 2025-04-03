@@ -5,9 +5,6 @@ from matplotlib import pyplot as plt
 import autograd.numpy as npa
 
 
-# In[2]:
-
-
 pml_size = 1.0  # (μm)
 
 dx = 0.02
@@ -77,9 +74,6 @@ kpoint = mp.Vector3(1, 0, 0)
 src = mp.GaussianSource(frequency=fcen, fwidth=fwidth)
 
 
-# In[3]:
-
-
 fwidth = width * fcen
 source_center  = [source_x, source_y, source_z]
 # source_center  = [-Sx/2 + pml_size + waveguide_length/3,0,0]
@@ -115,9 +109,6 @@ sim = mp.Simulation(cell_size=cell_size,
 sim.plot2D()
 
 
-# In[4]:
-
-
 def mapping(x,eta,beta):
     x = (npa.fliplr(x.reshape(Nx,Ny)) + x.reshape(Nx,Ny))/2 # up-down symmetry
     # filter
@@ -129,14 +120,8 @@ def mapping(x,eta,beta):
     return projected_field.flatten()
 
 
-# In[5]:
-
-
 design_region.update_design_parameters(mapping(np.random.rand(Nx,Ny),0.5,256))
 sim.plot2D()
-
-
-# In[6]:
 
 
 mode = 1
@@ -162,9 +147,6 @@ opt = mpa.OptimizationProblem(
 opt.plot2D(True)
 
 
-# In[ ]:
-
-
 x0 = 0.5*np.ones((Nx,Ny))
 idxmap = mapping(x0,0.5,2)
 f0, g0 = opt()
@@ -174,9 +156,6 @@ print(g0.shape)
 plt.imshow(np.rot90(g0[:,0].reshape(Nx,Ny)))
 plt.colorbar()
 plt.show()
-
-# In[ ]:
-
 
 from autograd import tensor_jacobian_product
 backprop_gradient = tensor_jacobian_product(mapping,0)(x0,0.5,2,g0[:,0])

@@ -1,8 +1,52 @@
+import shutil
+import sys
 import os
 import numpy as np
 from scipy import fftpack
 from icecream import ic
 from scipy.signal import convolve2d
+
+
+def mirror_upper_y_half(x):
+    """
+    prend la partie superueure x[:, half:] de x et la copie sur la partie
+    inferieure x[:, :half]
+    """
+    half = int(x.shape[1]/2)
+    upper_half = x[:, half:]
+    if x.shape[1] % 2 == 0:
+        out = np.concatenate([np.fliplr(upper_half), upper_half], axis=1)
+    if x.shape[1] % 2 == 1:
+        # si ou a x est de taille impaire en y, on ne repete pas la ligne du
+        # milieu
+        out = np.concatenate(
+            [np.fliplr(upper_half)[:, :-1], upper_half], axis=1)
+    return out
+
+
+def nom_fichier():
+    chemin_fichier = sys.argv[0]
+    # Obtenir le nom de base du fichier (avec extension)
+    nom_fichier_avec_extension = os.path.basename(chemin_fichier)
+    # Obtenir le nom du fichier sans l'extension
+    nom_fichier_sans_extension = os.path.splitext(nom_fichier_avec_extension)[0]
+
+    return nom_fichier_sans_extension
+
+
+def save_code(savepath):
+    chemin_nouveau_fichier = os.path.join(savepath, 'code.py')
+    try:
+        chemin_script_original = sys.argv[0]
+        if not os.path.exists(chemin_script_original):
+            print(
+                f"Erreur: Le fichier original '{chemin_script_original}' n'existe pas.")
+            return
+        shutil.copy2(chemin_script_original, chemin_nouveau_fichier)
+        print(
+            f"Le script a été sauvegardé avec succès dans '{chemin_nouveau_fichier}'.")
+    except Exception as e:
+        print(f"Une erreur s'est produite lors de la sauvegarde: {e}")
 
 
 def entgrad_genre(x):
