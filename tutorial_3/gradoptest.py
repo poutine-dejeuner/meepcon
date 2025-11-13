@@ -277,6 +277,8 @@ def get_opt():
     )
 
     sim_args = {"Nx": Nx, "Ny": Ny,
+                "Sx": Sx, "Sy": Sy,
+                "fcen": fcen,
                 "filter_radius": filter_radius,
                 "design_region_width": design_region_width,
                 "design_region_height": design_region_height,

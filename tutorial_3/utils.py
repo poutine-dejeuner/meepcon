@@ -110,8 +110,10 @@ def double_with_mirror(image):
     return doubled_image
 
 
-def normalise(image):
+def normalise(image, rangemin=0, rangemax=1):
+    assert rangemax > rangemin
     image = (image - image.min()) / (image.max() - image.min())
+    image = image*(rangemax - rangemin) + rangemin
     return image
 
 

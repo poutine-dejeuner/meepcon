@@ -105,8 +105,10 @@ sim = mp.Simulation(cell_size=cell_size,
                     sources=source,
                     #symmetries=[mp.Mirror(direction=mp.Y)],
                     default_material=SiO2,
-                    resolution=resolution)
+                    resolution=resolution,
+                    force_all_components=True)
 sim.plot2D()
+plt.savefig("designregion.png")
 
 
 def mapping(x,eta,beta):

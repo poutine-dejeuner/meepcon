@@ -166,6 +166,7 @@ cur_iter = [0]
 
 
 def f(v, gradient, cur_beta):
+    savepath = "figures"
     print("Current iteration: {}".format(cur_iter[0]+1))
 
     f0, dJ_du = opt([mapping(v, eta_i, cur_beta)])
@@ -175,7 +176,7 @@ def f(v, gradient, cur_beta):
     opt.plot2D(False, ax=ax, plot_sources_flag=False,
                plot_monitors_flag=False, plot_boundaries_flag=False)
     ax.axis('off')
-    plt.savefig(os.path.join(savepath, f'/{cur_iter[0]+1}.png'))
+    plt.savefig(os.path.join(savepath, f'{cur_iter[0]+1}.png'))
 
     if gradient.size > 0:
         gradient[:] = tensor_jacobian_product(mapping, 0)(
